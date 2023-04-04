@@ -1,0 +1,231 @@
+- name: Установка Nginx, Nginx log exporter, Node exporter и Filebeat
+  hosts: web
+  vars:
+    elastic: 10.20.0.50
+    kibana: 10.20.0.40
+  become: true
+  tasks:
+
+    - name: Установка Nginx Log and Node Exporter
+      apt:
+        update_cache: yes
+        name:
+          - nginx
+          - prometheus-node-exporter
+      notify:
+        - restart node exporter
+
+    - name: Загрузка Nginx Log Exporter
+      get_url:
+        url: "https://github.com/martin-helmich/prometheus-nginxlog-exporter/releases/download/v1.10.0/prometheus-nginxlog-exporter_1.10.0_linux_amd64.deb"
+        dest: /tmp/nginx_log_exporter.deb
+
+    - name: Установка Nginx Log Exporter
+      apt:
+        deb: /tmp/nginx_log_exporter.deb
+      notify:
+        - restart nginx log exporter
+
+    - name: Загрузка Filebeat
+      get_url:
+        url: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.9.3-amd64.deb"
+        dest: /tmp/filebeat.deb
+
+    - name: Установка Filebeat
+      apt:
+        deb: /tmp/filebeat.deb
+      notify:
+        - restart filebeat
+        
+    - name: Настройка конфигурации Filebeat
+      template:
+        src: templates/filebeat.j2
+        dest: /etc/filebeat/filebeat.yml
+      notify:
+        - restart filebeat
+
+    - name: Создать директории для сайта
+      file:
+        path: /var/www/html/mysite
+        state: directory
+
+    - name: Создать индексную страницу
+      copy:
+        src: ./sites/index.html
+        dest: /var/www/html/mysite/index.html
+  
+    - name: Настройка конфигурации Nginx
+      template:
+        src: templates/nginx.j2
+        dest: /etc/nginx/nginx.conf
+      notify:
+        - restart nginx
+        
+    - name: Configure prometheus-nginxlog-exporter config
+      copy:
+        src: ./config/prometheus-nginxlog-exporter.yml
+        dest: /etc/prometheus-nginxlog-exporter.yml
+      notify: restart nginx log exporter
+
+    - name: Удаление файла
+      file:
+        path: /etc/prometheus-nginxlog-exporter.hcl
+        state: absent
+
+    - name: Configure prometheus-nginxlog-exporter service
+      copy:
+        src: ./service/prometheus-nginxlog-exporter.service
+        dest: /lib/systemd/system/prometheus-nginxlog-exporter.service
+      notify: restart nginx log exporter
+
+  handlers:
+    - name: restart node exporter
+      become: true
+      systemd:
+        name: prometheus-node-exporter
+        state: restarted
+    - name: restart filebeat
+      become: true
+      systemd:
+        name: filebeat
+        state: restarted
+    - name: restart nginx log exporter
+      become: true
+      systemd:
+        name: prometheus-nginxlog-exporter
+        state: restarted
+    - name: restart nginx
+      become: true
+      systemd:
+        name: nginx
+        state: restarted
+
+- name: Установка prometheus
+  hosts: prometheus
+  vars:
+    web_1: 10.5.0.10
+    web_2: 10.6.0.10
+  become: true
+  tasks:
+    - name: Установка Prometheus
+      apt:
+        update_cache: yes
+        name: prometheus
+        state: latest
+      notify:
+        - restart prometheus
+    - name: Конфигурация Prometheus
+      template:
+        src: templates/prometheus.j2
+        dest: /etc/prometheus/prometheus.yml
+  handlers: 
+    - name: restart prometheus
+      service: 
+        name: prometheus
+        state: restarted
+
+- name: Установка и настройка Grafana
+  hosts: grafana
+  become: true
+  vars:
+    prometheus: 10.20.0.10
+    grafana_version: "latest"
+    grafana_admin_password: "secret"
+  tasks:
+    - name: Установка Docker
+      apt:
+        update_cache: yes
+        name:
+          - docker.io
+    - name: Создание директории для Grafana provisioning
+      file:
+        path: /etc/grafana/provisioning/datasources
+        state: directory
+        mode: 0755
+        recurse: true
+    - name: Создание директории для Grafana dashboard
+      file:
+        path: /etc/grafana/provisioning/dashboards
+        state: directory
+        mode: 0755
+        recurse: true
+    - name: Настройка datasources
+      template:
+        src: templates/grafana.j2
+        dest: /etc/grafana/provisioning/datasources/grafana.yml
+    - name: Настройка dashboard
+      copy: 
+        src: "{{ item }}"
+        dest: /etc/grafana/provisioning/dashboards
+      loop:
+        - ./dashboards/dashboard_node.json
+        - ./dashboards/dashboard.yml
+    - name: Установка контейнера Grafana
+      docker_container:
+        name: grafana
+        image: grafana/grafana:{{ grafana_version }}
+        restart_policy: always
+        published_ports:
+          - "3000:3000"
+        volumes:
+          - "/etc/grafana/provisioning:/etc/grafana/provisioning"
+        env:
+          GF_SECURITY_ADMIN_PASSWORD: "{{ grafana_admin_password }}"
+
+- name: Установка и настройка Elasticsearch
+  hosts: elastic
+  become: true
+  vars:
+    elastic: 10.20.0.50
+  tasks:
+    - name: Добавление зеркало репозитория elastic
+      apt_repository:
+        repo: "deb [trusted=yes] https://mirror.yandex.ru/mirrors/elastic/7/ stable main"
+        state: present
+    - name: Установка Elasticsearch
+      apt:
+        update_cache: yes
+        name: elasticsearch
+        state: present
+    - name: Конфигурация Elasticsearch
+      template:
+        src: templates/elasticsearch.j2
+        dest: /etc/elasticsearch/elasticsearch.yml
+      notify:
+        - restart elasticsearch
+  handlers:
+    - name: restart elasticsearch
+      become: true
+      systemd:
+        name: elasticsearch
+        state: restarted
+
+- name: Установка и настройка Kibana
+  hosts: kibana
+  become: true
+  vars:
+    elastic: 10.20.0.50
+    kibana: 10.20.0.40
+  tasks:
+    - name: Добавление зеркало репозитория elastic
+      apt_repository:
+        repo: "deb [trusted=yes] https://mirror.yandex.ru/mirrors/elastic/7/ stable main"
+        state: present
+    - name: Установка Kibana
+      apt:
+        update_cache: yes
+        name: kibana
+        state: present
+    - name: Конфигурация kibana
+      template:
+        src: templates/kibana.j2
+        dest: /etc/kibana/kibana.yml
+      notify:
+        - restart kibana
+  handlers:
+    - name: restart kibana
+      become: true
+      systemd:
+        name: kibana
+        state: restarted
+

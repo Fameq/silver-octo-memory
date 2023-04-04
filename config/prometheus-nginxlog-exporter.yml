@@ -1,0 +1,4 @@
+nginxlog-exporter:
+  nginx:
+    access_log_path: /var/log/nginx/access.log
+    ignored_uris: ['/healthz']

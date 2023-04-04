@@ -1,0 +1,12 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['{{ web_1 }}:9100', '{{ web_2 }}:9100']
+
+  - job_name: 'nginxlogs'
+    static_configs:
+      - targets: ['{{ web_1 }}:4040', '{{ web_2 }}:4040']

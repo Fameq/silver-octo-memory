@@ -1,0 +1,8 @@
+#cloud-config
+users:
+  - name: fameq
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAJ96eJgg0h4Z5dRTYPtPkjYc4rF30ZyNmE/u9HRZyss fame@DESKTOP-JGCKAIA

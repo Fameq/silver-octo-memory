@@ -333,6 +333,7 @@ resource "yandex_compute_instance" "elastic" {
   boot_disk {
     initialize_params {
       image_id = var.image_id
+      size = 20
     }
   }
   network_interface {
@@ -358,6 +359,7 @@ resource "yandex_compute_instance" "kibana" {
   boot_disk {
     initialize_params {
       image_id = var.image_id
+      size = 10
     }
   }
   network_interface {

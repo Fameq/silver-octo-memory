@@ -1,104 +1,3 @@
-- name: Установка Nginx, Nginx log exporter, Node exporter и Filebeat
-  hosts: web
-  vars:
-    elastic: 10.20.0.50
-    kibana: 10.20.0.40
-  become: true
-  tasks:
-
-    - name: Установка Nginx Log and Node Exporter
-      apt:
-        update_cache: yes
-        name:
-          - nginx
-          - prometheus-node-exporter
-      notify:
-        - restart node exporter
-
-    - name: Загрузка Nginx Log Exporter
-      get_url:
-        url: "https://github.com/martin-helmich/prometheus-nginxlog-exporter/releases/download/v1.10.0/prometheus-nginxlog-exporter_1.10.0_linux_amd64.deb"
-        dest: /tmp/nginx_log_exporter.deb
-
-    - name: Установка Nginx Log Exporter
-      apt:
-        deb: /tmp/nginx_log_exporter.deb
-      notify:
-        - restart nginx log exporter
-
-    - name: Загрузка Filebeat
-      get_url:
-        url: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.9.3-amd64.deb"
-        dest: /tmp/filebeat.deb
-
-    - name: Установка Filebeat
-      apt:
-        deb: /tmp/filebeat.deb
-      notify:
-        - restart filebeat
-        
-    - name: Настройка конфигурации Filebeat
-      template:
-        src: templates/filebeat.j2
-        dest: /etc/filebeat/filebeat.yml
-      notify:
-        - restart filebeat
-
-    - name: Создать директории для сайта
-      file:
-        path: /var/www/html/mysite
-        state: directory
-
-    - name: Создать индексную страницу
-      copy:
-        src: ./sites/index.html
-        dest: /var/www/html/mysite/index.html
-  
-    - name: Настройка конфигурации Nginx
-      template:
-        src: templates/nginx.j2
-        dest: /etc/nginx/nginx.conf
-      notify:
-        - restart nginx
-        
-    - name: Configure prometheus-nginxlog-exporter config
-      copy:
-        src: ./config/prometheus-nginxlog-exporter.yml
-        dest: /etc/prometheus-nginxlog-exporter.yml
-      notify: restart nginx log exporter
-
-    - name: Удаление файла
-      file:
-        path: /etc/prometheus-nginxlog-exporter.hcl
-        state: absent
-
-    - name: Configure prometheus-nginxlog-exporter service
-      copy:
-        src: ./service/prometheus-nginxlog-exporter.service
-        dest: /lib/systemd/system/prometheus-nginxlog-exporter.service
-      notify: restart nginx log exporter
-
-  handlers:
-    - name: restart node exporter
-      become: true
-      systemd:
-        name: prometheus-node-exporter
-        state: restarted
-    - name: restart filebeat
-      become: true
-      systemd:
-        name: filebeat
-        state: restarted
-    - name: restart nginx log exporter
-      become: true
-      systemd:
-        name: prometheus-nginxlog-exporter
-        state: restarted
-    - name: restart nginx
-      become: true
-      systemd:
-        name: nginx
-        state: restarted
 
 - name: Установка prometheus
   hosts: prometheus
@@ -229,3 +128,89 @@
         name: kibana
         state: restarted
 
+- name: Установка Nginx, Nginx log exporter, Node exporter и Filebeat
+  hosts: web
+  vars:
+    elastic: 10.20.0.50
+    kibana: 10.20.0.40
+  become: true
+  tasks:
+    - name: Установка Nginx and Node Exporter
+      apt:
+        update_cache: yes
+        name:
+          - nginx
+          - prometheus-node-exporter
+      notify:
+        - restart node exporter
+    - name: Загрузка Nginx Log Exporter
+      get_url:
+        url: "https://github.com/martin-helmich/prometheus-nginxlog-exporter/releases/download/v1.10.0/prometheus-nginxlog-exporter_1.10.0_linux_amd64.deb"
+        dest: /tmp/nginx_log_exporter.deb
+    - name: Установка Nginx Log Exporter
+      apt:
+        deb: /tmp/nginx_log_exporter.deb
+    - name: Загрузка Filebeat
+      get_url:
+        url: "https://mirror.yandex.ru/mirrors/elastic/7/pool/main/f/filebeat/filebeat-7.9.3-amd64.deb"
+        dest: /tmp/filebeat.deb
+    - name: Установка Filebeat
+      apt:
+        deb: /tmp/filebeat.deb
+    - name: Создать директории для сайта
+      file:
+        path: /var/www/html/mysite
+        state: directory
+    - name: Создать индексную страницу
+      copy:
+        src: ./sites/index.html
+        dest: /var/www/html/mysite/index.html
+    - name: Настройка конфигурации Nginx
+      template:
+        src: templates/nginx.j2
+        dest: /etc/nginx/nginx.conf
+      notify:
+        - restart nginx   
+    - name: Настройка конфигурации Filebeat
+      template:
+        src: templates/filebeat.j2
+        dest: /etc/filebeat/filebeat.yml
+      notify:
+        - restart filebeat
+    - name: Удаление старого конфигурационнного файла filebeat
+      file:
+        path: /etc/prometheus-nginxlog-exporter.hcl
+        state: absent
+    - name: Настройка конфига prometheus-nginxlog-exporter 
+      copy:
+        src: ./config/prometheus-nginxlog-exporter.yml
+        dest: /etc/prometheus-nginxlog-exporter.yml
+    - name: Настройка сервиса prometheus-nginxlog-exporter 
+      copy:
+        src: ./service/prometheus-nginxlog-exporter.service
+        dest: /lib/systemd/system/prometheus-nginxlog-exporter.service
+      notify: restart nginx log exporter
+    - name: Reload Systemd Daemon
+      systemd:
+        daemon_reload: yes
+  handlers:
+    - name: restart node exporter
+      become: true
+      systemd:
+        name: prometheus-node-exporter
+        state: restarted
+    - name: restart filebeat
+      become: true
+      systemd:
+        name: filebeat
+        state: restarted
+    - name: restart nginx log exporter
+      become: true
+      systemd:
+        name: prometheus-nginxlog-exporter
+        state: restarted
+    - name: restart nginx
+      become: true
+      systemd:
+        name: nginx
+        state: restarted

@@ -1,4 +1,41 @@
-nginxlog-exporter:
-  nginx:
-    access_log_path: /var/log/nginx/access.log
-    ignored_uris: ['/healthz']
+# Определяем, на каком адресе и порту будет работать экспортер
+listen:
+  port: 4040
+  address: 0.0.0.0
+
+# Определяем, какие метрики мы хотим собирать
+namespaces:
+  - name: nginx
+    format: "$remote_addr - $remote_user [$time_local] \"$request\" $status $body_bytes_sent \"$http_referer\" \"$http_user_agent\" \"$request_time\""
+    source:
+      files:
+        - "/var/log/nginx/access.log"
+    labels:
+      app: "application-one"
+      environment: "production"
+      foo: "bar"
+    histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1
+      - 2.5
+      - 5
+      - 10
+
+#Определяем, куда отправлять метрики
+consul:
+  enable: true
+  address: "localhost:8500"
+  datacenter: "dc1"
+  scheme: "http"
+  token: ""
+  service:
+    id: "nginx-exporter"
+    name: "nginx-exporter"
+    address: "localhost"
+    tags: ["foo", "bar"]

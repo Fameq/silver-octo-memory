@@ -58,6 +58,7 @@
         dest: /etc/grafana/provisioning/dashboards
       loop:
         - ./dashboards/dashboard_node.json
+        - ./dashboards/dashboard_nginx.json
         - ./dashboards/dashboard.yml
     - name: Установка контейнера Grafana
       docker_container:
@@ -177,7 +178,17 @@
         dest: /etc/filebeat/filebeat.yml
       notify:
         - restart filebeat
-    - name: Удаление старого конфигурационнного файла filebeat
+    - name: Установка Consul
+      apt:
+        name: consul
+      notify: start consul
+    - name: Изменение привелегий для access.log
+      become: yes
+      become_method: sudo
+      file:
+        path: /var/log/nginx/access.log
+        mode: 'a+r'
+    - name: Удаление старого конфигурационнного файла nginx_log_exporter
       file:
         path: /etc/prometheus-nginxlog-exporter.hcl
         state: absent
@@ -194,6 +205,11 @@
       systemd:
         daemon_reload: yes
   handlers:
+    - name: start consul
+      become: true
+      systemd:
+        name: consul
+        state: started
     - name: restart node exporter
       become: true
       systemd:
